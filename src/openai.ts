@@ -145,31 +145,58 @@ export const embedProducts = async () => {
   );
 };
 
-const generateResponse = async (params: ResponseCreateParamsNonStreaming) => {
+const createCartPromptChunks = (input: string, products: string[]) => {
+  const chunkSize = 100;
+  const chunks: string[] = [];
+
+  for (let i = 0; i < chunkSize; i += chunkSize) {
+    chunks.push(
+      `Retorne uma lista de até 5 produtos que satisfação a necessidade do usuário. Os produtos disponíveis são os seguintes: ${JSON.stringify(
+        products.slice(i, i + chunkSize),
+      )}`,
+    );
+  }
+
+  return chunks;
+};
+
+const generateResponse = async <T = null>(
+  params: ResponseCreateParamsNonStreaming,
+) => {
   const response = await client.responses.parse(params);
 
-  if (response.output_parsed) return response.output_parsed;
+  if (response.output_parsed) return response.output_parsed as T;
 
-  if (response.output_text) return response.output_text;
+  // if (response.output_text) return response.output_text;
 
   return null;
 };
 
 export const generateCart = async (input: string, products: string[]) => {
-  return generateResponse({
-    model: "gpt-4o-mini",
-    instructions: `Retorne uma lista de até 5 produtos que satisfação a necessidade do usuário. Os produtos disponíveis são os seguintes: ${JSON.stringify(products)}`,
-    input,
-    tools: [
-      {
-        type: "file_search",
-        vector_store_ids: ["vs_696e6d983620819198bb6d7a78584bbb"],
+  const promises = createCartPromptChunks(input, products).map((chunk) => {
+    return generateResponse<{
+      produtos: string[];
+    }>({
+      model: "gpt-4o-mini",
+      instructions: chunk,
+      input,
+      tools: [
+        {
+          type: "file_search",
+          vector_store_ids: ["vs_696e6d983620819198bb6d7a78584bbb"],
+        },
+      ],
+      text: {
+        format: zodTextFormat(schema, "carrinho"),
       },
-    ],
-    text: {
-      format: zodTextFormat(schema, "carrinho"),
-    },
+    });
   });
+
+  const results = await Promise.all(promises);
+
+  return results
+    .filter((r): r is { produtos: string[] } => Boolean(r))
+    .flatMap((r) => r.produtos);
 };
 
 export const uploadFile = async (file: ReadStream) => {
