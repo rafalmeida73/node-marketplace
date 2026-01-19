@@ -151,7 +151,8 @@ const createCartPromptChunks = (input: string, products: string[]) => {
 
   for (let i = 0; i < chunkSize; i += chunkSize) {
     chunks.push(
-      `Retorne uma lista de até 5 produtos que satisfação a necessidade do usuário. Os produtos disponíveis são os seguintes: ${JSON.stringify(
+      `Retorne uma lista de até 5 produtos que satisfação a necessidade do usuário.
+      Os produtos disponíveis são os seguintes: ${JSON.stringify(
         products.slice(i, i + chunkSize),
       )}`,
     );
@@ -173,13 +174,28 @@ const generateResponse = async <T = null>(
 };
 
 export const generateCart = async (input: string, products: string[]) => {
+  const ingredientes = await client.responses.create({
+    input,
+    model: "gpt-4o-mini",
+    instructions: `Retorne uma lista de até 5 ingredientes que satisfação a necessidade do usuário.
+      1. Divida o prato em components principais.
+      2. Para cada componente, forneça uma lista de ingredientes que podem ser usados para prepará-lo.
+    `,
+    text: {
+      format: zodTextFormat(
+        z.object({ ingredientes: z.array(z.string()) }),
+        "receita",
+      ),
+    },
+  });
+
   const promises = createCartPromptChunks(input, products).map((chunk) => {
     return generateResponse<{
       produtos: string[];
     }>({
       model: "gpt-4o-mini",
       instructions: chunk,
-      input,
+      input: `${input}: ingredientes necessários: ${ingredientes}`,
       tools: [
         {
           type: "file_search",
