@@ -14,6 +14,7 @@ import {
   todosProdutos,
 } from "./database";
 import { ResponseCreateParamsNonStreaming } from "openai/resources/responses/responses.mjs";
+import { ReadStream } from "node:fs";
 
 const schema = z.object({
   produtos: z.array(z.string()),
@@ -159,8 +160,32 @@ export const generateCart = async (input: string, products: string[]) => {
     model: "gpt-4o-mini",
     instructions: `Retorne uma lista de até 5 produtos que satisfação a necessidade do usuário. Os produtos disponíveis são os seguintes: ${JSON.stringify(products)}`,
     input,
+    tools: [
+      {
+        type: "file_search",
+        vector_store_ids: ["vs_696e6d983620819198bb6d7a78584bbb"],
+      },
+    ],
     text: {
       format: zodTextFormat(schema, "carrinho"),
     },
   });
+};
+
+export const uploadFile = async (file: ReadStream) => {
+  const uploaded = await client.files.create({
+    file,
+    purpose: "assistants",
+  });
+
+  console.dir(uploaded, { depth: null });
+};
+
+export const createVector = async () => {
+  const vectorStore = await client.vectorStores.create({
+    name: "node_ia_file_search_class",
+    file_ids: ["file-RWTAkqGRd6Wp3KYdfwSYmf"],
+  });
+
+  console.dir(vectorStore, { depth: null });
 };

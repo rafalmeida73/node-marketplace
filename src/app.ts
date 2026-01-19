@@ -1,11 +1,15 @@
 import express from "express";
 import {
+  createVector,
   embedProducts,
   generateCart,
   generateEmbedding,
   generateProducts,
+  uploadFile,
 } from "./openai";
 import { produtosSimilares, todosProdutos } from "./database";
+import { createReadStream } from "node:fs";
+import path from "node:path";
 
 const app = express();
 app.use(express.json());
@@ -48,9 +52,25 @@ app.post("/embedding", async (req, res) => {
 app.post("/response", async (req, res) => {
   const { input } = req.body;
 
-  const cart = await generateCart(input, ["feijão", "detergente"]);
+  const cart = await generateCart(
+    input,
+    todosProdutos().map((p) => p.nome),
+  );
 
   res.json(cart);
+});
+
+app.post("/upload", async (req, res) => {
+  const file = createReadStream(
+    path.join(__dirname, "..", "static", "recipes.md"),
+  );
+  uploadFile(file);
+  res.status(201).end();
+});
+
+app.post("/vector-store", async (req, res) => {
+  await createVector();
+  res.status(201).end();
 });
 
 export default app;
