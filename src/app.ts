@@ -1,13 +1,18 @@
 import express from "express";
 import {
+  createEmbeddingsBatch,
+  createEmbeddingsBatchFile,
   createVector,
   embedProducts,
   generateCart,
   generateEmbedding,
   generateProducts,
+  getBatch,
+  getFileContent,
+  processEmbeddingsBatchResult,
   uploadFile,
 } from "./openai";
-import { produtosSimilares, todosProdutos } from "./database";
+import { produtosSimilares, setarEmbedding, todosProdutos } from "./database";
 import { createReadStream } from "node:fs";
 import path from "node:path";
 
@@ -71,6 +76,37 @@ app.post("/upload", async (req, res) => {
 app.post("/vector-store", async (req, res) => {
   await createVector();
   res.status(201).end();
+});
+
+app.post("/embeddings-batch", async (req, res) => {
+  const file = await createEmbeddingsBatchFile(
+    todosProdutos().map((p) => `${p.nome}: ${p.descricao}`),
+  );
+  const batch = await createEmbeddingsBatch(file.id);
+  res.json(batch);
+});
+
+app.post("/embeddings-batch/result", async (_, res) => {
+  const result = await processEmbeddingsBatchResult(
+    "batch_681cef110b348190ac52d60760584d26",
+  );
+  if (!result) {
+    res.status(200).json({ message: "Still processing" });
+    return;
+  }
+
+  result.forEach((r) => setarEmbedding(r.id, r.embeddings));
+
+  res.status(201).end();
+});
+
+app.get("/products", async (req, res) => {
+  res.json(
+    todosProdutos().map((p) => ({
+      ...p,
+      embedding: p.embedding ? p.embedding.slice(0, 3) : null,
+    })),
+  );
 });
 
 export default app;

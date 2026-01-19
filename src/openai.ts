@@ -189,3 +189,74 @@ export const createVector = async () => {
 
   console.dir(vectorStore, { depth: null });
 };
+
+export const createEmbeddingsBatchFile = async (products: string[]) => {
+  const content = products
+    .map((p, i) => ({
+      custom_id: String(i),
+      method: "POST",
+      url: "/v1/embeddings",
+      body: {
+        input: p,
+        model: "text-embedding-3-small",
+        encoding_format: "float",
+      },
+    }))
+    .map((p) => JSON.stringify(p))
+    .join("\n");
+
+  const file = new File([content], "embeddings-batch.jsonl");
+  const uploaded = await client.files.create({
+    file,
+    purpose: "batch",
+  });
+
+  return uploaded;
+};
+
+export const createEmbeddingsBatch = async (fileId: string) => {
+  const batch = await client.batches.create({
+    input_file_id: fileId,
+    endpoint: "/v1/embeddings",
+    completion_window: "24h",
+  });
+
+  return batch;
+};
+
+export const getBatch = async (id: string) => {
+  return await client.batches.retrieve(id);
+};
+
+export const getFileContent = async (id: string) => {
+  const response = await client.files.content(id);
+
+  return response.text();
+};
+
+export const processEmbeddingsBatchResult = async (batchId) => {
+  const batch = await getBatch(batchId);
+  if (batch.status !== "completed" || !batch.output_file_id) {
+    return null;
+  }
+
+  const content = await getFileContent(batch.output_file_id);
+  return content
+    .split("\n")
+    .map((line) => {
+      try {
+        const parsed = JSON.parse(line) as {
+          custom_id: string;
+          response: { body: { data: { embedding: number[] }[] } };
+        };
+        return {
+          id: Number(parsed.custom_id),
+          embeddings: parsed.response.body.data[0].embedding,
+        };
+      } catch (e) {
+        console.error(e);
+        return null;
+      }
+    })
+    .filter((r): r is { id: number; embeddings: number[] } => Boolean(r));
+};
